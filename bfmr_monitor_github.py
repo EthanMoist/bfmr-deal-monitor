@@ -104,7 +104,16 @@ class BFMRMonitor:
             if retailer_links and len(retailer_links) > 0:
                 url = retailer_links[0].get('url', 'N/A')
         
-        info = f"""
+        # Add prominent warning for exclusive deals
+        exclusive_warning = ""
+        if is_exclusive:
+            exclusive_warning = """
+⚠️⚠️⚠️ EXCLUSIVE DEAL - MAY NOT BE VISIBLE ON WEBSITE ⚠️⚠️⚠️
+This is an exclusive deal that may not appear on buyformeretail.com
+Contact BFMR support if you want access to exclusive deals.
+"""
+        
+        info = f"""{exclusive_warning}
 Deal ID: {deal_id}
 Deal Code: {deal_code}
 Title: {title}
@@ -113,7 +122,7 @@ Type: {retail_type}
 Retail Price: ${retail_price}
 Your Payout: ${payout_price}
 Closes At: {closing_at}
-Exclusive: {"Yes" if is_exclusive else "No"}
+Exclusive: {"⚠️ YES - May not be accessible" if is_exclusive else "No"}
 Bundle: {"Yes" if is_bundle else "No"}
 URL: {url}
         """
@@ -170,6 +179,7 @@ URL: {url}
         amazon_deals = []
         current_amazon_ids = set()
         new_or_returning_deals = []
+        exclusive_count = 0
         
         for deal in deals:
             deal_id = str(deal.get('deal_id', ''))
@@ -180,21 +190,38 @@ URL: {url}
                 amazon_deals.append(deal)
                 current_amazon_ids.add(deal_id)
                 
+                if deal.get('is_exclusive_deal', False):
+                    exclusive_count += 1
+                
                 # Check if it's new or returning (wasn't in last run)
                 if deal_id and deal_id not in self.last_run_deals:
                     new_or_returning_deals.append(deal)
         
         print(f"📦 Amazon deals found now: {len(amazon_deals)}")
+        print(f"⚠️  Exclusive deals: {exclusive_count}")
         print(f"📦 Amazon deals in last run: {len(self.last_run_deals)}")
         
         # Save current deals for next comparison
         self.save_current_run_deals(current_amazon_ids)
         
         if new_or_returning_deals:
-            print(f"\n🎉 Found {len(new_or_returning_deals)} NEW or RETURNING Amazon deal(s)!")
+            # Count exclusive vs regular in new deals
+            new_exclusive = sum(1 for d in new_or_returning_deals if d.get('is_exclusive_deal', False))
+            new_regular = len(new_or_returning_deals) - new_exclusive
             
-            # Build email
-            email_body = f"Found {len(new_or_returning_deals)} new/returning Amazon deal(s) on BFMR:\n\n"
+            print(f"\n🎉 Found {len(new_or_returning_deals)} NEW or RETURNING Amazon deal(s)!")
+            print(f"   - Regular deals: {new_regular}")
+            print(f"   - Exclusive deals: {new_exclusive}")
+            
+            # Build email with summary
+            email_body = f"Found {len(new_or_returning_deals)} new/returning Amazon deal(s) on BFMR:\n"
+            email_body += f"  • {new_regular} regular deal(s)\n"
+            email_body += f"  • {new_exclusive} exclusive deal(s) ⚠️\n\n"
+            
+            if new_exclusive > 0:
+                email_body += "⚠️ NOTE: Exclusive deals may not be visible on the BFMR website.\n"
+                email_body += "Contact BFMR support if you want access to exclusive deals.\n\n"
+            
             email_body += "(These deals were not available in the last check 5 minutes ago)\n\n"
             email_body += "=" * 60 + "\n\n"
             
@@ -206,10 +233,11 @@ URL: {url}
             email_body += f"Checked at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
             
             # Send email
-            self.send_email(
-                f"🚨 {len(new_or_returning_deals)} New/Returning Amazon Deal(s)!",
-                email_body
-            )
+            subject = f"🚨 {len(new_or_returning_deals)} New/Returning Amazon Deal(s)"
+            if new_exclusive > 0:
+                subject += f" ({new_exclusive} Exclusive ⚠️)"
+            
+            self.send_email(subject, email_body)
             
             print(f"✅ Updated tracking file with {len(current_amazon_ids)} current Amazon deals")
         else:
