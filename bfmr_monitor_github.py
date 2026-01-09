@@ -81,23 +81,39 @@ class BFMRMonitor:
     
     def format_deal_info(self, deal):
         """Format deal information for email"""
-        deal_id = deal.get('id', 'Unknown')
-        title = deal.get('title') or deal.get('name') or deal.get('product_name', 'No title')
-        price = deal.get('price', 'N/A')
-        payout = deal.get('payout') or deal.get('buyer_price', 'N/A')
-        url = deal.get('url') or deal.get('product_url', '')
-        store = deal.get('store') or deal.get('retailer', 'Amazon')
-        quantity = deal.get('quantity', 'N/A')
+        deal_id = deal.get('deal_id', 'Unknown')
+        deal_code = deal.get('deal_code', 'N/A')
+        title = deal.get('title', 'No title')
+        retail_price = deal.get('retail_price', 'N/A')
+        payout_price = deal.get('payout_price', 'N/A')
+        retailers = deal.get('retailers', 'Amazon')
+        retail_type = deal.get('retail_type', 'N/A')
+        closing_at = deal.get('closing_at', 'N/A')
+        is_exclusive = deal.get('is_exclusive_deal', False)
+        is_bundle = deal.get('is_bundle', False)
         
-        return f"""
+        # Get URL from first item's retailer links if available
+        url = 'N/A'
+        items = deal.get('items', [])
+        if items and len(items) > 0:
+            retailer_links = items[0].get('retailer_links', [])
+            if retailer_links and len(retailer_links) > 0:
+                url = retailer_links[0].get('url', 'N/A')
+        
+        info = f"""
 Deal ID: {deal_id}
+Deal Code: {deal_code}
 Title: {title}
-Store: {store}
-Price: ${price}
-Your Payout: ${payout}
-Quantity: {quantity}
+Retailer: {retailers}
+Type: {retail_type}
+Retail Price: ${retail_price}
+Your Payout: ${payout_price}
+Closes At: {closing_at}
+Exclusive: {"Yes" if is_exclusive else "No"}
+Bundle: {"Yes" if is_bundle else "No"}
 URL: {url}
-        """.strip()
+        """
+        return info.strip()
     
     def send_email(self, subject, body):
         """Send email notification"""
@@ -149,13 +165,13 @@ URL: {url}
         # Find new deals
         new_deals = []
         for deal in deals:
-            deal_id = str(deal.get('id', deal.get('deal_id', '')))
+            deal_id = str(deal.get('deal_id', ''))
             
             if deal_id and deal_id not in self.seen_deals:
                 new_deals.append(deal)
                 self.seen_deals[deal_id] = {
                     'first_seen': datetime.now().isoformat(),
-                    'title': deal.get('title') or deal.get('name', 'Unknown')
+                    'title': deal.get('title', 'Unknown')
                 }
         
         if new_deals:
