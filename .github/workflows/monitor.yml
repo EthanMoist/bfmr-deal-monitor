@@ -27,8 +27,6 @@ jobs:
       env:
         BFMR_API_KEY: ${{ secrets.BFMR_API_KEY }}
         BFMR_API_SECRET: ${{ secrets.BFMR_API_SECRET }}
-        EMAIL_SMTP_SERVER: ${{ secrets.EMAIL_SMTP_SERVER }}
-        EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
         EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
         EMAIL_TO: ${{ secrets.EMAIL_TO }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
