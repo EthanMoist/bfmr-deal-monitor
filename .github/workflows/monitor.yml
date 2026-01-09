@@ -1,0 +1,49 @@
+name: BFMR Deal Monitor
+
+on:
+  schedule:
+    # Runs every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  check-deals:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests
+    
+    - name: Run deal monitor
+      env:
+        BFMR_API_KEY: ${{ secrets.BFMR_API_KEY }}
+        BFMR_API_SECRET: ${{ secrets.BFMR_API_SECRET }}
+        EMAIL_SMTP_SERVER: ${{ secrets.EMAIL_SMTP_SERVER }}
+        EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
+        EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      run: |
+        python bfmr_monitor_github.py
+    
+    - name: Upload seen deals
+      uses: actions/upload-artifact@v3
+      with:
+        name: seen-deals
+        path: seen_deals.json
+        retention-days: 90
+    
+    - name: Download previous seen deals
+      uses: actions/download-artifact@v3
+      with:
+        name: seen-deals
+      continue-on-error: true
