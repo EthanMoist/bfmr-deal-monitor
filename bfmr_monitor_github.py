@@ -55,34 +55,29 @@ class BFMRMonitor:
     
     def get_deals(self):
         """Fetch current deals from BFMR API"""
-        endpoints_to_try = [
-            f"{self.base_url}/api/v2/deals",
-            f"{self.base_url}/api/deals",
-            f"{self.base_url}/deals",
-        ]
+        endpoint = f"{self.base_url}/api/v2/deals"
         
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "X-API-Key": self.api_key,
-            "X-API-Secret": self.api_secret,
+            "API-KEY": self.api_key,
+            "API-SECRET": self.api_secret,
         }
         
-        for endpoint in endpoints_to_try:
-            try:
-                print(f"Trying endpoint: {endpoint}")
-                response = requests.get(endpoint, headers=headers, timeout=10)
-                print(f"Status code: {response.status_code}")
-                
-                if response.status_code == 200:
-                    return response.json()
-                elif response.status_code == 401:
-                    print("Authentication failed")
-                    return None
-            except Exception as e:
-                print(f"Error with {endpoint}: {e}")
-                continue
-        
-        return None
+        try:
+            print(f"Trying endpoint: {endpoint}")
+            response = requests.get(endpoint, headers=headers, timeout=10)
+            print(f"Status code: {response.status_code}")
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 401:
+                print("Authentication failed - check your API credentials")
+                return None
+            else:
+                print(f"Unexpected status code: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
     
     def format_deal_info(self, deal):
         """Format deal information for email"""
