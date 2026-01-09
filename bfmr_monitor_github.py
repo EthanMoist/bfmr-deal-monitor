@@ -55,11 +55,12 @@ class BFMRMonitor:
     
     def get_deals(self):
         """Fetch current deals from BFMR API"""
-       endpoints_to_try = [
+        endpoints_to_try = [
             f"{self.base_url}/api/v2/deals",
             f"{self.base_url}/api/deals",
             f"{self.base_url}/deals",
         ]
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "X-API-Key": self.api_key,
@@ -205,8 +206,6 @@ def main():
         print("  - EMAIL_FROM")
         print("  - EMAIL_TO")  
         print("  - EMAIL_PASSWORD")
-        print("  - EMAIL_SMTP_SERVER (optional, defaults to smtp.gmail.com)")
-        print("  - EMAIL_SMTP_PORT (optional, defaults to 587)")
         return 1
     except Exception as e:
         print(f"❌ Unexpected Error: {e}")
@@ -216,5 +215,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     exit(main())
