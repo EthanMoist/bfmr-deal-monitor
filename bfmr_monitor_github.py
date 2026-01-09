@@ -162,23 +162,33 @@ URL: {url}
             print("No deals currently available")
             return
         
-        # Find new deals
+        # Find new Amazon-only deals
         new_deals = []
+        amazon_count = 0
+        
         for deal in deals:
             deal_id = str(deal.get('deal_id', ''))
+            retailers = deal.get('retailers', '').lower()
             
-            if deal_id and deal_id not in self.seen_deals:
-                new_deals.append(deal)
-                self.seen_deals[deal_id] = {
-                    'first_seen': datetime.now().isoformat(),
-                    'title': deal.get('title', 'Unknown')
-                }
+            # Check if it's an Amazon deal
+            if 'amazon' in retailers:
+                amazon_count += 1
+                
+                # Check if it's a new deal
+                if deal_id and deal_id not in self.seen_deals:
+                    new_deals.append(deal)
+                    self.seen_deals[deal_id] = {
+                        'first_seen': datetime.now().isoformat(),
+                        'title': deal.get('title', 'Unknown')
+                    }
+        
+        print(f"📦 Amazon deals found: {amazon_count}")
         
         if new_deals:
-            print(f"\n🎉 Found {len(new_deals)} NEW deal(s)!")
+            print(f"\n🎉 Found {len(new_deals)} NEW Amazon deal(s)!")
             
             # Build email
-            email_body = f"Found {len(new_deals)} new BFMR deal(s):\n\n"
+            email_body = f"Found {len(new_deals)} new Amazon deal(s) on BFMR:\n\n"
             email_body += "=" * 60 + "\n\n"
             
             for deal in new_deals:
@@ -190,7 +200,7 @@ URL: {url}
             
             # Send email
             self.send_email(
-                f"🚨 {len(new_deals)} New BFMR Deal(s) Available!",
+                f"🚨 {len(new_deals)} New Amazon Deal(s) on BFMR!",
                 email_body
             )
             
@@ -198,7 +208,7 @@ URL: {url}
             self.save_seen_deals()
             print(f"✅ Saved {len(self.seen_deals)} total deals to tracking file")
         else:
-            print("✓ No new deals (all deals already seen)")
+            print("✓ No new Amazon deals (all Amazon deals already seen)")
         
         print(f"\n{'='*60}\n")
 
