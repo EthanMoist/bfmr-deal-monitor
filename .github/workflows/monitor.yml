@@ -36,14 +36,14 @@ jobs:
         python bfmr_monitor_github.py
     
     - name: Upload seen deals
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: seen-deals
         path: seen_deals.json
         retention-days: 90
     
     - name: Download previous seen deals
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: seen-deals
       continue-on-error: true
