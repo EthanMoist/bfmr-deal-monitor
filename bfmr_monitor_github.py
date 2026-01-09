@@ -34,24 +34,28 @@ class BFMRMonitor:
                    self.email_config['password']]):
             raise ValueError("Required environment variables not set")
         
-        # File to store seen deals
-        self.seen_deals_file = Path("seen_deals.json")
-        self.seen_deals = self.load_seen_deals()
+        # File to store deals from last run
+        self.last_run_file = Path("last_run_deals.json")
+        self.last_run_deals = self.load_last_run_deals()
         
-    def load_seen_deals(self):
-        """Load previously seen deals from file"""
-        if self.seen_deals_file.exists():
+    def load_last_run_deals(self):
+        """Load deals from the previous run"""
+        if self.last_run_file.exists():
             try:
-                with open(self.seen_deals_file, 'r') as f:
-                    return json.load(f)
+                with open(self.last_run_file, 'r') as f:
+                    data = json.load(f)
+                    return set(data.get('deal_ids', []))
             except:
-                return {}
-        return {}
+                return set()
+        return set()
     
-    def save_seen_deals(self):
-        """Save seen deals to file"""
-        with open(self.seen_deals_file, 'w') as f:
-            json.dump(self.seen_deals, f, indent=2)
+    def save_current_run_deals(self, deal_ids):
+        """Save current run's deal IDs for next comparison"""
+        with open(self.last_run_file, 'w') as f:
+            json.dump({
+                'deal_ids': list(deal_ids),
+                'timestamp': datetime.now().isoformat()
+            }, f, indent=2)
     
     def get_deals(self):
         """Fetch current deals from BFMR API"""
@@ -162,9 +166,10 @@ URL: {url}
             print("No deals currently available")
             return
         
-        # Find new Amazon-only deals
-        new_deals = []
-        amazon_count = 0
+        # Find Amazon deals and compare to last run
+        amazon_deals = []
+        current_amazon_ids = set()
+        new_or_returning_deals = []
         
         for deal in deals:
             deal_id = str(deal.get('deal_id', ''))
@@ -172,26 +177,28 @@ URL: {url}
             
             # Check if it's an Amazon deal
             if 'amazon' in retailers:
-                amazon_count += 1
+                amazon_deals.append(deal)
+                current_amazon_ids.add(deal_id)
                 
-                # Check if it's a new deal
-                if deal_id and deal_id not in self.seen_deals:
-                    new_deals.append(deal)
-                    self.seen_deals[deal_id] = {
-                        'first_seen': datetime.now().isoformat(),
-                        'title': deal.get('title', 'Unknown')
-                    }
+                # Check if it's new or returning (wasn't in last run)
+                if deal_id and deal_id not in self.last_run_deals:
+                    new_or_returning_deals.append(deal)
         
-        print(f"📦 Amazon deals found: {amazon_count}")
+        print(f"📦 Amazon deals found now: {len(amazon_deals)}")
+        print(f"📦 Amazon deals in last run: {len(self.last_run_deals)}")
         
-        if new_deals:
-            print(f"\n🎉 Found {len(new_deals)} NEW Amazon deal(s)!")
+        # Save current deals for next comparison
+        self.save_current_run_deals(current_amazon_ids)
+        
+        if new_or_returning_deals:
+            print(f"\n🎉 Found {len(new_or_returning_deals)} NEW or RETURNING Amazon deal(s)!")
             
             # Build email
-            email_body = f"Found {len(new_deals)} new Amazon deal(s) on BFMR:\n\n"
+            email_body = f"Found {len(new_or_returning_deals)} new/returning Amazon deal(s) on BFMR:\n\n"
+            email_body += "(These deals were not available in the last check 5 minutes ago)\n\n"
             email_body += "=" * 60 + "\n\n"
             
-            for deal in new_deals:
+            for deal in new_or_returning_deals:
                 email_body += self.format_deal_info(deal)
                 email_body += "\n\n" + "=" * 60 + "\n\n"
             
@@ -200,15 +207,18 @@ URL: {url}
             
             # Send email
             self.send_email(
-                f"🚨 {len(new_deals)} New Amazon Deal(s) on BFMR!",
+                f"🚨 {len(new_or_returning_deals)} New/Returning Amazon Deal(s)!",
                 email_body
             )
             
-            # Save updated seen deals
-            self.save_seen_deals()
-            print(f"✅ Saved {len(self.seen_deals)} total deals to tracking file")
+            print(f"✅ Updated tracking file with {len(current_amazon_ids)} current Amazon deals")
         else:
-            print("✓ No new Amazon deals (all Amazon deals already seen)")
+            print("✓ No new or returning Amazon deals (same as last run)")
+        
+        # Show which deals disappeared
+        disappeared = self.last_run_deals - current_amazon_ids
+        if disappeared:
+            print(f"📉 {len(disappeared)} deal(s) disappeared since last run")
         
         print(f"\n{'='*60}\n")
 
