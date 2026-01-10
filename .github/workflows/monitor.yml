@@ -39,9 +39,16 @@ jobs:
       run: |
         python bfmr_monitor_github.py
     
+    - name: Check if file was created
+      run: |
+        ls -la
+        echo "---"
+        cat last_run_deals.json || echo "File does not exist"
+    
     - name: Upload current run data
       uses: actions/upload-artifact@v4
       with:
         name: last-run-deals
         path: last_run_deals.json
         retention-days: 90
+      continue-on-error: true
