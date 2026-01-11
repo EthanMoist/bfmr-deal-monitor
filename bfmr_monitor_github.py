@@ -8,6 +8,7 @@ import requests
 import json
 import smtplib
 import os
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -56,9 +57,10 @@ class BFMRMonitor:
                 'deal_ids': list(deal_ids),
                 'timestamp': datetime.now().isoformat()
             }, f, indent=2)
+        print(f"💾 Saved {len(deal_ids)} deal IDs to tracking file")
     
     def get_deals(self):
-        """Fetch current deals from BFMR API"""
+        """Fetch current deals from BFMR API with retry logic"""
         endpoint = f"{self.base_url}/api/v2/deals"
         
         headers = {
@@ -66,22 +68,44 @@ class BFMRMonitor:
             "API-SECRET": self.api_secret,
         }
         
-        try:
-            print(f"Trying endpoint: {endpoint}")
-            response = requests.get(endpoint, headers=headers, timeout=10)
-            print(f"Status code: {response.status_code}")
-            
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 401:
-                print("Authentication failed - check your API credentials")
-                return None
-            else:
-                print(f"Unexpected status code: {response.status_code}")
-                return None
-        except Exception as e:
-            print(f"Error: {e}")
-            return None
+        max_retries = 3
+        timeout = 30  # Increased from 10 to 30 seconds
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"Trying endpoint: {endpoint} (attempt {attempt + 1}/{max_retries})")
+                response = requests.get(endpoint, headers=headers, timeout=timeout)
+                print(f"Status code: {response.status_code}")
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 401:
+                    print("Authentication failed - check your API credentials")
+                    return None
+                else:
+                    print(f"Unexpected status code: {response.status_code}")
+                    if attempt < max_retries - 1:
+                        print(f"Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        return None
+            except requests.exceptions.Timeout:
+                print(f"Request timed out after {timeout} seconds")
+                if attempt < max_retries - 1:
+                    print(f"Retrying in 5 seconds...")
+                    time.sleep(5)
+                else:
+                    print(f"Failed after {max_retries} attempts")
+                    return None
+            except Exception as e:
+                print(f"Error: {e}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying in 5 seconds...")
+                    time.sleep(5)
+                else:
+                    return None
+        
+        return None
     
     def format_deal_info(self, deal):
         """Format deal information for email"""
@@ -156,122 +180,3 @@ URL: {url}
         """Check for new deals and send notifications"""
         print(f"\n{'='*60}")
         print(f"BFMR Deal Check - {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print(f"{'='*60}\n")
-        
-        deals_data = self.get_deals()
-        
-        if not deals_data:
-            print("⚠️  Could not fetch deals")
-            return
-        
-        # Extract deals from response
-        deals = deals_data
-        if isinstance(deals_data, dict):
-            deals = deals_data.get('deals', deals_data.get('data', []))
-        
-        print(f"📊 Total deals found: {len(deals) if deals else 0}")
-        
-        if not deals:
-            print("No deals currently available")
-            return
-        
-        # Find Amazon deals and compare to last run
-        amazon_deals = []
-        current_amazon_ids = set()
-        new_or_returning_deals = []
-        exclusive_count = 0
-        
-        for deal in deals:
-            deal_id = str(deal.get('deal_id', ''))
-            retailers = deal.get('retailers', '').lower()
-            
-            # Check if it's an Amazon deal
-            if 'amazon' in retailers:
-                amazon_deals.append(deal)
-                current_amazon_ids.add(deal_id)
-                
-                if deal.get('is_exclusive_deal', False):
-                    exclusive_count += 1
-                
-                # Check if it's new or returning (wasn't in last run)
-                if deal_id and deal_id not in self.last_run_deals:
-                    new_or_returning_deals.append(deal)
-        
-        print(f"📦 Amazon deals found now: {len(amazon_deals)}")
-        print(f"⚠️  Exclusive deals: {exclusive_count}")
-        print(f"📦 Amazon deals in last run: {len(self.last_run_deals)}")
-        
-        # Save current deals for next comparison
-        self.save_current_run_deals(current_amazon_ids)
-        
-        if new_or_returning_deals:
-            # Count exclusive vs regular in new deals
-            new_exclusive = sum(1 for d in new_or_returning_deals if d.get('is_exclusive_deal', False))
-            new_regular = len(new_or_returning_deals) - new_exclusive
-            
-            print(f"\n🎉 Found {len(new_or_returning_deals)} NEW or RETURNING Amazon deal(s)!")
-            print(f"   - Regular deals: {new_regular}")
-            print(f"   - Exclusive deals: {new_exclusive}")
-            
-            # Build email with summary
-            email_body = f"Found {len(new_or_returning_deals)} new/returning Amazon deal(s) on BFMR:\n"
-            email_body += f"  • {new_regular} regular deal(s)\n"
-            email_body += f"  • {new_exclusive} exclusive deal(s) ⚠️\n\n"
-            
-            if new_exclusive > 0:
-                email_body += "⚠️ NOTE: Exclusive deals may not be visible on the BFMR website.\n"
-                email_body += "Contact BFMR support if you want access to exclusive deals.\n\n"
-            
-            email_body += "(These deals were not available in the last check 5 minutes ago)\n\n"
-            email_body += "=" * 60 + "\n\n"
-            
-            for deal in new_or_returning_deals:
-                email_body += self.format_deal_info(deal)
-                email_body += "\n\n" + "=" * 60 + "\n\n"
-            
-            email_body += f"\nView all deals: https://www.buyformeretail.com/deals\n"
-            email_body += f"Checked at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
-            
-            # Send email
-            subject = f"🚨 {len(new_or_returning_deals)} New/Returning Amazon Deal(s)"
-            if new_exclusive > 0:
-                subject += f" ({new_exclusive} Exclusive ⚠️)"
-            
-            self.send_email(subject, email_body)
-            
-            print(f"✅ Updated tracking file with {len(current_amazon_ids)} current Amazon deals")
-        else:
-            print("✓ No new or returning Amazon deals (same as last run)")
-        
-        # Show which deals disappeared
-        disappeared = self.last_run_deals - current_amazon_ids
-        if disappeared:
-            print(f"📉 {len(disappeared)} deal(s) disappeared since last run")
-        
-        print(f"\n{'='*60}\n")
-
-
-def main():
-    """Main function"""
-    try:
-        monitor = BFMRMonitor()
-        monitor.check_for_new_deals()
-        return 0
-    except ValueError as e:
-        print(f"❌ Configuration Error: {e}")
-        print("\nRequired GitHub Secrets:")
-        print("  - BFMR_API_KEY")
-        print("  - BFMR_API_SECRET")
-        print("  - EMAIL_FROM")
-        print("  - EMAIL_TO")  
-        print("  - EMAIL_PASSWORD")
-        return 1
-    except Exception as e:
-        print(f"❌ Unexpected Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-if __name__ == "__main__":
-    exit(main())
